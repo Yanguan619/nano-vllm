@@ -12,7 +12,6 @@ from nanovllm.layers.embed_head import VocabParallelEmbedding, ParallelLMHead
 
 
 class Qwen3Attention(nn.Module):
-
     def __init__(
         self,
         hidden_size: int,
@@ -28,10 +27,10 @@ class Qwen3Attention(nn.Module):
         super().__init__()
         tp_size = dist.get_world_size()
         self.total_num_heads = num_heads
-        assert self.total_num_heads % tp_size == 0
+        assert self.total_num_heads % tp_size == 0, f"num_heads must be divisible by tp_size ({tp_size}), current is {num_heads}"
         self.num_heads = self.total_num_heads // tp_size
         self.total_num_kv_heads = num_kv_heads
-        assert self.total_num_kv_heads % tp_size == 0
+        assert self.total_num_kv_heads % tp_size == 0, f"num_kv_heads must be divisible by tp_size ({tp_size}), current is {num_kv_heads}"
         self.num_kv_heads = self.total_num_kv_heads // tp_size
         self.head_dim = head_dim or hidden_size // self.total_num_heads
         self.q_size = self.num_heads * self.head_dim

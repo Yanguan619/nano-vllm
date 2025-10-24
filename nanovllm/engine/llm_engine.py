@@ -13,11 +13,14 @@ from nanovllm.engine.model_runner import ModelRunner
 
 
 class LLMEngine:
-
+    """
+    LLMEngine类负责管理整个推理流程，包括模型初始化、请求管理、调度、分布式并行、tokenizer处理等。
+    """
     def __init__(self, model, **kwargs):
         config_fields = {field.name for field in fields(Config)}
         config_kwargs = {k: v for k, v in kwargs.items() if k in config_fields}
         config = Config(model, **config_kwargs)
+        # 存储分布式进程和事件
         self.ps = []
         self.events = []
         ctx = mp.get_context("spawn")
@@ -27,6 +30,8 @@ class LLMEngine:
             process.start()
             self.ps.append(process)
             self.events.append(event)
+        # 存储分布式进程和事件 end
+        # 主进程的ModelRunner实例
         self.model_runner = ModelRunner(config, 0, self.events)
         self.tokenizer = AutoTokenizer.from_pretrained(config.model, use_fast=True)
         config.eos = self.tokenizer.eos_token_id
@@ -46,6 +51,11 @@ class LLMEngine:
         self.scheduler.add(seq)
 
     def step(self):
+        """
+        1. from scheduler get cur seqs + status
+        2. forward
+        3. postprocess
+        """
         seqs, is_prefill = self.scheduler.schedule()
         token_ids = self.model_runner.call("run", seqs, is_prefill)
         self.scheduler.postprocess(seqs, token_ids)

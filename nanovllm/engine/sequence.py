@@ -12,6 +12,13 @@ class SequenceStatus(Enum):
 
 
 class Sequence:
+    """每个seq除了传入的token_ids,sampling_params,还具备以下属性
+    
+    - status
+    - block_size
+    - block_table
+    - ...
+    """
     block_size = 256
     counter = count()
 
