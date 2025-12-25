@@ -13,7 +13,7 @@ class SequenceStatus(Enum):
 
 class Sequence:
     """每个seq除了传入的token_ids,sampling_params,还具备以下属性
-    
+
     - status
     - block_size
     - block_table
@@ -25,7 +25,7 @@ class Sequence:
     def __init__(self, token_ids: list[int], sampling_params = SamplingParams()):
         self.seq_id = next(Sequence.counter)
         self.status = SequenceStatus.WAITING
-        self.token_ids = copy(token_ids)
+        self.token_ids: list[int] = copy(token_ids)
         self.last_token = token_ids[-1]
         self.num_tokens = len(self.token_ids)
         self.num_prompt_tokens = len(token_ids)
@@ -69,7 +69,10 @@ class Sequence:
     def last_block_num_tokens(self):
         return self.num_tokens - (self.num_blocks - 1) * self.block_size
 
-    def block(self, i):
+    def block(self, i: int):
+        """
+        一个块是一组连续的长度为block_size的token_ids
+        """
         assert 0 <= i < self.num_blocks
         return self.token_ids[i*self.block_size: (i+1)*self.block_size]
 

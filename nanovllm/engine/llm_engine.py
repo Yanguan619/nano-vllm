@@ -52,9 +52,16 @@ class LLMEngine:
 
     def step(self):
         """
-        1. from scheduler get cur seqs + status
+        1. 从调度器中获取要处理的序列 -> forward -> postprocess -> 得到新的token_id（更新到seqs）
         2. forward
         3. postprocess
+
+        ## return
+        [(seq_id, completion_token_ids),...], num_tokens
+
+        (已完成的seq list, prefill则获取当前step生成的tokens数 | decode则获取负的当前step生成的tokens数)
+
+        decode为什么返回负的，便于调用该接口的地方能区分出当前step是在做prefill还是decode
         """
         seqs, is_prefill = self.scheduler.schedule()
         token_ids = self.model_runner.call("run", seqs, is_prefill)
@@ -63,6 +70,7 @@ class LLMEngine:
         num_tokens = sum(len(seq) for seq in seqs) if is_prefill else -len(seqs)
         return outputs, num_tokens
 
+    @property
     def is_finished(self):
         return self.scheduler.is_finished()
 
@@ -80,7 +88,8 @@ class LLMEngine:
             self.add_request(prompt, sp)
         outputs = {}
         prefill_throughput = decode_throughput = 0.
-        while not self.is_finished():
+        # 自回归
+        while not self.is_finished:
             t = perf_counter()
             output, num_tokens = self.step()
             if use_tqdm:

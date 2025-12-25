@@ -18,27 +18,22 @@ class Scheduler:
         return not self.waiting and not self.running
 
     def add(self, seq: Sequence):
-        """## Add a sequence to the waiting queue.
-        
-        每个seq包含prompt+sampling_params"""
+        """## Add a sequence to the waiting queue."""
         self.waiting.append(seq)
 
     def schedule(self) -> tuple[list[Sequence], bool]:
         """
-        return
-            list[Sequence]: scheduled_seqs
+        ## return
+            list[Sequence]
             bool: is_prefill
         """
-        # prefill
         scheduled_seqs = []
         num_seqs = 0
         num_batched_tokens = 0
-        # waiting中有新的seqs
+        # waiting中有新的seqs且未达到支持的最大序列数量，则按先进先出策略
         while self.waiting and num_seqs < self.max_num_seqs:
             seq = self.waiting[0]
-            # 当已有的tokens和等待中的seq的tokens 大于 max_num_batched_tokens
-            # 且kvcache 已满
-            # 则队列保持不变 
+            # 当总的tokens数+新的seq的tokens数大于max_num_batched_tokens,或block已满, 则不新增seq到running队列中
             if num_batched_tokens + len(seq) > self.max_num_batched_tokens or not self.block_manager.can_allocate(seq):
                 break
             num_seqs += 1
@@ -46,18 +41,17 @@ class Scheduler:
             num_batched_tokens += len(seq) - seq.num_cached_tokens
             seq.status = SequenceStatus.RUNNING
             self.waiting.popleft()
-            self.running.append(seq)  
+            self.running.append(seq)
             scheduled_seqs.append(seq)
+        # 若有新增seq加入running队列，则return，当前为prefill
         if scheduled_seqs:
             return scheduled_seqs, True
-
-        # decode
+        # 若未return, 则说明无新seq，继续做decode
         while self.running and num_seqs < self.max_num_seqs:
-            # 不断将running中的seq拿出来处理
+            # 不断将running中的seq拿出来处理,分配block
             seq = self.running.popleft()
             while not self.block_manager.can_append(seq):
-                # kvcache已满,抢占running中最后一个seq(将其放到waiting中)
-                # running为空的话就将当前seq放到waiting中并跳出(不需要再判断kvcache满状态)
+                # block已满，若running不为空则剔除最后一个seq;为空则剔除当前seq并跳出
                 if self.running:
                     self.preempt(self.running.pop())
                 else:
@@ -68,10 +62,13 @@ class Scheduler:
                 self.block_manager.may_append(seq)
                 scheduled_seqs.append(seq)
         assert scheduled_seqs
-        self.running.extendleft(reversed(scheduled_seqs))  # 将调度好的seq放到running中,但是为什么要反转
+        self.running.extendleft(reversed(scheduled_seqs))  # 将调度好的倒序后再反过来被拓展到running队列前面
         return scheduled_seqs, False
 
     def preempt(self, seq: Sequence):
+        """
+        将seq重新放入waiting队列
+        """
         seq.status = SequenceStatus.WAITING
         self.block_manager.deallocate(seq)
         self.waiting.appendleft(seq)
